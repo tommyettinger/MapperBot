@@ -1,4 +1,4 @@
-(ns Handy.routing
+(ns mapper.routing
   "Functions that make the bot speak in a channel."
   (:use [clojure.string :only [trim]]))
 
@@ -26,7 +26,7 @@ message, the user, etc."
 information. Returns nil if this raw messsage doesn't look like a bot
 command."
   (let [parsed-irc-message (parse-irc-message raw-message)]
-    (when-let [match (re-find #"%([^ ]+)(.*)" (parsed-irc-message :message))]
+    (when-let [match (re-find #"%(\S+)(.*)" (parsed-irc-message :message))]
       (let [[_ command-name argument] match]
         (conj parsed-irc-message
               {:command-name command-name :argument (trim argument)})))))
@@ -51,13 +51,25 @@ PARSED-MESSAGE. The command may only say something in the channel."
   `(do
      (defn ~name ~params ~doc-string ~body)
      (dosync (alter command-routing conj
-                    {(str '~name) ~name}))))
+                    {(str '~name) (with-meta ~name {:raw false})}))))
+
+(defmacro defraw
+  "A raw command available in the IRC bot with the %foo syntax. Sends to server."
+  [name params doc-string body]
+  `(do
+     (defn ~name ~params ~doc-string ~body)
+     (dosync (alter command-routing conj
+                    {(str '~name) (with-meta ~name {:raw true})}))))
 
 (defcommand hello [{nick :nick}]
   "Greet the user who spoke."
   (format "Hello %s!" nick))
 
 (defn join-channel [{channel :argument}]
+  (format "JOIN %s" channel))
+
+(defraw enter [{channel :argument}]
+  "Enter another channel."
   (format "JOIN %s" channel))
 
 (defcommand magic8 [{}]
@@ -74,4 +86,6 @@ PARSED-MESSAGE. The command may only say something in the channel."
   (when-let [parsed-message (parse-bot-message raw-message)]
     (let [command-name (parsed-message :command-name)
           command (or (@command-routing command-name) unknown-command)]
-     (call-say-command server-connection command parsed-message))))
+     (if (:raw (meta command))
+     	     (call-raw-command server-connection command parsed-message)
+     	     (call-say-command server-connection command parsed-message)))))

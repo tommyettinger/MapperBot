@@ -1,13 +1,16 @@
-(ns Handy.connection
+(ns mapper.connection
   "Functions for connecting to an IRC server."
-  (:use [Handy.routing :only [dispatch-command]]))
+  (:use [mapper.routing :only [dispatch-command]]
+  	[overtone.at-at]))
 
 ;; todo: automatically generate names when there's a name clash
-(def NICK "HandyBot")
-(def USER-NAME "HandyBot")
-(def HOST-NAME "HandyBot")
-(def SERVER-NAME "HandyBot")
-(def REAL-NAME "Handy IRC Bot")
+(def NICK "MapBot5x10")
+(def USER-NAME "MapBot")
+(def HOST-NAME "MapBot")
+(def SERVER-NAME "MapBot")
+(def REAL-NAME "A bot for displaying maps")
+
+(def my-pool (mk-pool))
 
 (defn open-socket [host port]
   (let [socket (java.net.Socket. host port)
@@ -20,6 +23,7 @@
 (defn send-to-server [server-connection raw-message]
   (let [to-server (:to-server server-connection)]
     (.print to-server (format "%s\r\n" raw-message))
+    (println (str "!!!RAW!!!   " raw-message))
     (.flush to-server)))
 
 (defn connect-to-server [host port]
@@ -34,7 +38,7 @@
   (.close (:from-server server-connection)))
 
 (defn join-channel [server-connection channel]
-  (send-to-server server-connection (format "JOIN %s" channel)))
+  (send-to-server server-connection (format "JOIN %s" channel)) "[JOINED]")
 
 ;; todo: nicely separate out raw functions from chat functions
 (defn answer-ping [message]
@@ -49,7 +53,7 @@
 (defn server-event-loop [server-connection channel]
   "Join CHANNEL, and respond to the users there."
   ;; todo: this shouldn't be part of the event loop
-  (join-channel server-connection channel)
+  (at (+ 15000 (now)) #(println (join-channel server-connection channel)) my-pool)
   (while true
     (let [message (.readLine (:from-server server-connection))]
       (do
